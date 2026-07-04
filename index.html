@@ -10,7 +10,7 @@
             padding: 0;
             width: 100%;
             height: 100%;
-            background-color: #000;
+            background: #000;
             overflow: hidden;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
         }
@@ -26,16 +26,14 @@
             position: relative;
             width: 100%;
             height: 100%;
-            background-color: #000;
-            -webkit-overflow-scrolling: touch;
+            background: #000;
         }
-        iframe {
+        video {
             position: absolute;
             top: 0; left: 0;
             width: 100%;
             height: 100%;
-            border: 0;
-            background-color: #000;
+            background: #000;
         }
         .loading-overlay {
             position: absolute;
@@ -44,7 +42,7 @@
             flex-direction: column;
             justify-content: center;
             align-items: center;
-            background-color: #000;
+            background: #000;
             color: #fff;
             z-index: 10;
             transition: opacity 0.5s ease;
@@ -61,6 +59,7 @@
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
+        #status { font-size: 14px; opacity: 0.7; margin-top: 10px; }
         @media (min-width: 768px) {
             .player-container {
                 width: 90vw;
@@ -80,90 +79,90 @@
         <div class="player-container">
             <div id="loading" class="loading-overlay">
                 <div class="spinner"></div>
-                <div id="loading-text">Loading stream...</div>
+                <div id="loading-text">Connecting to live stream...</div>
+                <div id="status"></div>
             </div>
-            <!-- NO sandbox attribute. Target for the form POST below. -->
-            <iframe
-                id="player-iframe"
-                name="player-iframe"
-                src="about:blank"
-                allow="autoplay *; fullscreen *; picture-in-picture *; encrypted-media *"
-                allowfullscreen
-                webkitallowfullscreen
-                mozallowfullscreen>
-            </iframe>
+            <video id="video" autoplay playsinline controls></video>
         </div>
     </div>
 
-    <!--
-        This form POSTs directly to noyoudontsee.me (the INNER player).
-        This completely skips the sportika.net wrapper page that has the
-        sandbox detection scripts. noyoudontsee.me has ZERO sandbox checks.
-        Tokens are fetched dynamically via JS below; these are fallbacks.
-    -->
-    <form id="player-form" method="POST" action="https://noyoudontsee.me/api/embed/tv/tsn-1" target="player-iframe" style="display:none;">
-        <input type="hidden" name="expires" id="f-expires" value="">
-        <input type="hidden" name="token" id="f-token" value="">
-        <input type="hidden" name="scope" id="f-scope" value="public">
-    </form>
+    <!-- hls.js for non-Safari browsers (Chrome, Firefox, etc.) -->
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
 
     <script>
-        // Fallback tokens (valid for ~1 hour from page generation)
-        const FALLBACK_EXPIRES = '1783141162';
-        const FALLBACK_TOKEN = 'a089f6627aad692d7af44dbddabc55e4c669fe34816bd8a4cb2038a914c744d0';
+        const video = document.getElementById('video');
+        const loadingEl = document.getElementById('loading');
+        const loadingText = document.getElementById('loading-text');
+        const statusEl = document.getElementById('status');
 
-        async function fetchFreshTokens() {
-            const proxyUrl = 'https://api.allorigins.win/get?url=' + encodeURIComponent('https://sportika.net/api/embed/tv/tsn-1');
-            try {
-                const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 5000);
-                const resp = await fetch(proxyUrl, { signal: controller.signal });
-                clearTimeout(timeoutId);
-                if (!resp.ok) throw new Error('bad response');
-                const json = await resp.json();
-                const html = json.contents || '';
-                const expiresMatch = html.match(/name="expires"\s+value="([^"]+)"/);
-                const tokenMatch = html.match(/name="token"\s+value="([^"]+)"/);
-                if (expiresMatch && tokenMatch) {
-                    return { expires: expiresMatch[1], token: tokenMatch[1] };
-                }
-            } catch (e) {
-                console.warn('Proxy fetch failed, using fallback tokens:', e);
+        // Stream URL — relative when served from the proxy server
+        const streamUrl = './live.m3u8';
+
+        function hideLoading() {
+            loadingEl.style.opacity = '0';
+            setTimeout(() => loadingEl.style.display = 'none', 500);
+        }
+
+        function showError(msg) {
+            loadingText.style.color = '#ff4444';
+            loadingText.innerText = msg;
+        }
+
+        async function waitForStream() {
+            statusEl.innerText = 'Waiting for server to start decrypting...';
+            for (let i = 0; i < 40; i++) {
+                try {
+                    const resp = await fetch(streamUrl, { method: 'HEAD' });
+                    if (resp.ok) return true;
+                } catch (e) { /* retry */ }
+                await new Promise(r => setTimeout(r, 2000));
+                statusEl.innerText = `Starting stream... (${i * 2}s)`;
             }
-            return null;
+            return false;
         }
 
-        async function loadPlayer() {
-            const loadingEl = document.getElementById('loading');
+        async function init() {
+            const ready = await waitForStream();
+            if (!ready) {
+                showError('Server is still starting up. Please refresh in 30 seconds.');
+                return;
+            }
 
-            // Try to get fresh tokens; fall back to hardcoded ones
-            const fresh = await fetchFreshTokens();
-            const expires = fresh ? fresh.expires : FALLBACK_EXPIRES;
-            const token = fresh ? fresh.token : FALLBACK_TOKEN;
-
-            document.getElementById('f-expires').value = expires;
-            document.getElementById('f-token').value = token;
-
-            // Submit the form — this POSTs to noyoudontsee.me inside our iframe
-            document.getElementById('player-form').submit();
-
-            // Hide the loading overlay once the iframe loads
-            const iframe = document.getElementById('player-iframe');
-            const forceHide = setTimeout(() => {
-                loadingEl.style.opacity = '0';
-                setTimeout(() => loadingEl.style.display = 'none', 500);
-            }, 5000);
-
-            iframe.onload = () => {
-                clearTimeout(forceHide);
-                setTimeout(() => {
-                    loadingEl.style.opacity = '0';
-                    setTimeout(() => loadingEl.style.display = 'none', 500);
-                }, 1000);
-            };
+            // iOS Safari: native HLS support — just set src
+            if (video.canPlayType('application/vnd.apple.mpegurl')) {
+                loadingText.innerText = 'Loading stream...';
+                video.src = streamUrl;
+                video.addEventListener('loadeddata', hideLoading);
+                video.addEventListener('playing', hideLoading);
+                video.addEventListener('error', () => showError('Playback error. Please refresh.'));
+                video.play().catch(() => {});
+            }
+            // Other browsers: use hls.js
+            else if (Hls.isSupported()) {
+                loadingText.innerText = 'Loading stream...';
+                const hls = new Hls({
+                    liveSyncDurationCount: 3,
+                    liveMaxLatencyDurationCount: 6,
+                    enableWorker: true,
+                });
+                hls.loadSource(streamUrl);
+                hls.attachMedia(video);
+                hls.on(Hls.Events.MANIFEST_PARSED, () => {
+                    video.play().catch(() => {});
+                    hideLoading();
+                });
+                hls.on(Hls.Events.ERROR, (event, data) => {
+                    if (data.fatal) {
+                        showError('Stream error. Retrying...');
+                        setTimeout(() => hls.loadSource(streamUrl), 3000);
+                    }
+                });
+            } else {
+                showError('Your browser does not support HLS playback.');
+            }
         }
 
-        document.addEventListener('DOMContentLoaded', loadPlayer);
+        document.addEventListener('DOMContentLoaded', init);
     </script>
 </body>
 </html>
