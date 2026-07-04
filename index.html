@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>Live Stream Player</title>
     <style>
-        /* Base styles */
         html, body {
             margin: 0;
             padding: 0;
@@ -14,19 +13,15 @@
             background-color: #000;
             overflow: hidden;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            -webkit-font-smoothing: antialiased;
         }
 
         .viewport-wrapper {
             position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
+            top: 0; left: 0; right: 0; bottom: 0;
             display: flex;
             justify-content: center;
             align-items: center;
-            background: radial-gradient(circle at center, #141414 0%, #000000 100%);
+            background: #000;
         }
 
         .player-container {
@@ -34,180 +29,43 @@
             width: 100%;
             height: 100%;
             background-color: #000;
+            -webkit-overflow-scrolling: touch;
         }
 
-        /* Iframe styling */
         iframe {
             position: absolute;
-            top: 0;
-            left: 0;
+            top: 0; left: 0;
             width: 100%;
             height: 100%;
             border: 0;
             background-color: #000;
         }
 
-        /* Desktop/Tablet 16:9 box */
         @media (min-width: 768px) {
             .player-container {
                 width: 90vw;
-                height: 50.625vw; /* 16:9 Aspect Ratio */
+                height: 50.625vw;
                 max-width: 1120px;
                 max-height: 630px;
                 border-radius: 16px;
                 overflow: hidden;
-                box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7), 0 0 50px rgba(0, 188, 212, 0.15);
-                border: 1px solid rgba(255, 255, 255, 0.05);
+                box-shadow: 0 25px 50px -12px rgba(0,0,0,0.7), 0 0 50px rgba(0,188,212,0.15);
+                border: 1px solid rgba(255,255,255,0.05);
             }
-        }
-
-        /* Loading spinner styling */
-        .loading-overlay {
-            position: absolute;
-            inset: 0;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            background-color: #000;
-            color: #fff;
-            z-index: 10;
-            transition: opacity 0.5s ease;
-        }
-
-        .spinner {
-            border: 4px solid rgba(255, 255, 255, 0.1);
-            width: 50px;
-            height: 50px;
-            border-radius: 50%;
-            border-left-color: #00bcd4;
-            animation: spin 1s linear infinite;
-            margin-bottom: 20px;
-        }
-
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
         }
     </style>
 </head>
 <body>
-
     <div class="viewport-wrapper">
         <div class="player-container">
-            <!-- Loading Indicator -->
-            <div id="loading" class="loading-overlay">
-                <div class="spinner"></div>
-                <div id="loading-text">Bypassing sandbox checking & loading player...</div>
-            </div>
-
-            <!-- Target Iframe (Sandboxed to block ads, but forms/scripts allowed) -->
             <iframe 
-                id="player-iframe"
-                name="player-iframe"
-                src="about:blank"
-                allow="autoplay *; fullscreen *; picture-in-picture *; encrypted-media *"
-                allowfullscreen
-                webkitallowfullscreen
-                mozallowfullscreen
-                sandbox="allow-scripts allow-same-origin allow-presentation allow-forms">
+                src="https://sportika.net/api/embed/tv/tsn-1" 
+                allowfullscreen 
+                webkitallowfullscreen 
+                mozallowfullscreen 
+                allow="autoplay *; fullscreen *; picture-in-picture *; encrypted-media *">
             </iframe>
         </div>
     </div>
-
-    <script>
-        async function fetchHtml() {
-            const embedPageUrl = 'https://sportika.net/api/embed/tv/tsn-1';
-            const proxies = [
-                'https://api.allorigins.win/get?url=' + encodeURIComponent(embedPageUrl),
-                'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(embedPageUrl),
-                'https://api.allorigins.win/raw?url=' + encodeURIComponent(embedPageUrl)
-            ];
-
-            for (const proxyUrl of proxies) {
-                try {
-                    console.log('Fetching source via:', proxyUrl);
-                    const controller = new AbortController();
-                    const timeoutId = setTimeout(() => controller.abort(), 8000); // 8 seconds timeout
-
-                    const response = await fetch(proxyUrl, { signal: controller.signal });
-                    clearTimeout(timeoutId);
-
-                    if (response.ok) {
-                        if (proxyUrl.includes('/get?url=')) {
-                            const json = await response.json();
-                            if (json.contents && json.contents.includes('private-embed-form')) {
-                                return json.contents;
-                            }
-                        } else {
-                            const text = await response.text();
-                            if (text && text.includes('private-embed-form')) {
-                                return text;
-                            }
-                        }
-                    }
-                } catch (e) {
-                    console.warn('Proxy failed:', proxyUrl, e);
-                }
-            }
-            throw new Error('All CORS proxies failed to fetch stream tokens.');
-        }
-
-        function stripSandboxWarning(html) {
-            // Neutralize the script that writes "Sandbox warning" if DOM storage/checks fail
-            html = html.replace('catch (e) {', 'catch (e) { console.log("Bypassed sandbox DOM test"); } if (false) {');
-            
-            // Override detectSandbox and showSandbox functions to prevent them from running
-            html = html.replace('function detectSandbox() {', 'function detectSandbox() { return false; ');
-            html = html.replace('function showSandbox() {', 'function showSandbox() { return; ');
-
-            // Force hide the sandbox overlay element in styling
-            html = html.replace('<div id="sandbox-overlay">', '<div id="sandbox-overlay" style="display:none !important;">');
-
-            // Force absolute URLs for any relative script URLs inside the iframe
-            html = html.replaceAll('src="/js/cdn.sportika.js"', 'src="https://sportika.net/js/cdn.sportika.js"');
-            html = html.replaceAll('src="js/cdn.sportika.js"', 'src="https://sportika.net/js/cdn.sportika.js"');
-            
-            return html;
-        }
-
-        async function loadStream() {
-            const loadingEl = document.getElementById('loading');
-            const loadingText = document.getElementById('loading-text');
-
-            try {
-                // 1. Grab fresh source page
-                const htmlText = await fetchHtml();
-
-                // 2. Strip sandbox-detection javascript blocks
-                const modifiedHtml = stripSandboxWarning(htmlText);
-
-                // 3. Inject into iframe
-                const iframe = document.getElementById('player-iframe');
-                iframe.srcdoc = modifiedHtml;
-
-                // Fallback timeout to hide the loading overlay
-                const forceRemoveLoader = setTimeout(() => {
-                    loadingEl.style.opacity = '0';
-                    setTimeout(() => loadingEl.style.display = 'none', 500);
-                }, 6000);
-
-                iframe.onload = () => {
-                    clearTimeout(forceRemoveLoader);
-                    setTimeout(() => {
-                        loadingEl.style.opacity = '0';
-                        setTimeout(() => loadingEl.style.display = 'none', 500);
-                    }, 1500);
-                };
-
-            } catch (error) {
-                console.error('Loader Error:', error);
-                loadingText.style.color = '#ff4444';
-                loadingText.innerText = 'Failed to load live video feed. Please reload the page.';
-            }
-        }
-
-        document.addEventListener('DOMContentLoaded', loadStream);
-    </script>
 </body>
 </html>
