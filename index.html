@@ -3,16 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Clean Live Stream Player</title>
-    
-    <!-- Shaka Player Files -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/shaka-player/4.15.10/shaka-player.compiled.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/shaka-player/4.15.10/shaka-player.ui.js"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/shaka-player/4.15.10/controls.css">
-    <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
-
+    <title>Live Stream Player</title>
     <style>
-        /* Full-screen setup */
+        /* Base styles */
         html, body {
             margin: 0;
             padding: 0;
@@ -43,19 +36,18 @@
             background-color: #000;
         }
 
-        video {
+        /* Iframe styling */
+        iframe {
+            position: absolute;
+            top: 0;
+            left: 0;
             width: 100%;
             height: 100%;
-            background: #000;
+            border: 0;
+            background-color: #000;
         }
 
-        /* Customize Shaka UI style */
-        .shaka-video-container {
-            width: 100%;
-            height: 100%;
-        }
-
-        /* Desktop/Tablet 16:9 player box */
+        /* Desktop/Tablet 16:9 box */
         @media (min-width: 768px) {
             .player-container {
                 width: 90vw;
@@ -68,82 +60,130 @@
                 border: 1px solid rgba(255, 255, 255, 0.05);
             }
         }
+
+        /* Loading spinner styling */
+        .loading-overlay {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background-color: #000;
+            color: #fff;
+            z-index: 10;
+            transition: opacity 0.5s ease;
+        }
+
+        .spinner {
+            border: 4px solid rgba(255, 255, 255, 0.1);
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            border-left-color: #00bcd4;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
     </style>
 </head>
 <body>
 
     <div class="viewport-wrapper">
-        <!-- Shaka Video Player Container -->
-        <div id="player-container" class="player-container shaka-video-container" data-shaka-player-container>
-            <video autoplay id="video" data-shaka-player playsinline></video>
+        <div class="player-container">
+            <!-- Loading Indicator -->
+            <div id="loading" class="loading-overlay">
+                <div class="spinner"></div>
+                <div id="loading-text">Requesting secure stream session...</div>
+            </div>
+
+            <!-- Target Iframe (Sandboxed to block all popup/redirect ads) -->
+            <iframe 
+                id="player-iframe"
+                name="player-iframe"
+                src="about:blank"
+                allow="autoplay *; fullscreen *; picture-in-picture *; encrypted-media *"
+                allowfullscreen
+                webkitallowfullscreen
+                mozallowfullscreen
+                sandbox="allow-scripts allow-same-origin allow-presentation">
+            </iframe>
         </div>
     </div>
 
     <script>
-        // Direct stream source details scraped from the backend embed
-        const manifestUri = 'https://bia-cf.live.pv-cdn.net/iad-nitro/live/dash/enc/w0rehjjrwe/out/v1/69a2a7041395406b970598f61680e7cf/cenc.mpd';
-        const clearKeyKid = '14eeabf30c14b7fbf3008c03099ce011';
-        const clearKeyKey = '17d2ac8dbc5429bd70af3433aa12158d';
-
-        async function initApp() {
-            // Install polyfills to patch browser differences
-            shaka.polyfill.installAll();
-
-            if (!shaka.Player.isBrowserSupported()) {
-                console.error('Browser not supported!');
-                alert('Your device does not support playing this stream natively.');
-                return;
-            }
-
-            const video = document.getElementById('video');
-            const container = document.getElementById('player-container');
-
-            // Initialize the Shaka Player instance
-            const player = new shaka.Player(video);
-
-            // Construct Shaka Player UI Controls
-            const ui = new shaka.ui.Overlay(player, container, video);
-            ui.configure({
-                controlPanelElements: ['play_pause', 'time_and_duration', 'spacer', 'mute', 'volume', 'fullscreen'],
-            });
-
-            // Configure ClearKey DRM Decryption
-            player.configure({
-                drm: {
-                    clearKeys: {
-                        [clearKeyKid]: clearKeyKey
-                    }
-                },
-                streaming: {
-                    liveSync: { enabled: true, targetLatency: 6, minLatency: 5, maxLatency: 25 },
-                    rebufferingGoal: 3,
-                    bufferingGoal: 4,
-                }
-            });
-
-            player.addEventListener('error', onErrorEvent);
+        async function loadStream() {
+            const loadingEl = document.getElementById('loading');
+            const loadingText = document.getElementById('loading-text');
+            const embedPageUrl = 'https://sportika.net/api/embed/tv/tsn-1';
+            const corsProxy = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(embedPageUrl);
 
             try {
-                await player.load(manifestUri);
-                console.log('The video stream loaded successfully!');
+                // Fetch the sportika source page using a public CORS proxy to grab fresh session tokens
+                const response = await fetch(corsProxy);
+                if (!response.ok) throw new Error('CORS fetch failure');
                 
-                if (player.isLive()) {
-                    try { player.goToLive(); } catch (e) {}
-                }
+                const htmlText = await response.text();
+
+                // Parse the DOM of the retrieved page
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(htmlText, 'text/html');
+
+                // Extract post target and hidden security tokens
+                const origForm = doc.getElementById('private-embed-form');
+                if (!origForm) throw new Error('Target embed configuration form not found');
+
+                const action = origForm.getAttribute('action');
+                const expires = doc.querySelector('input[name="expires"]')?.value;
+                const token = doc.querySelector('input[name="token"]')?.value;
+                const scope = doc.querySelector('input[name="scope"]')?.value;
+
+                if (!action || !token) throw new Error('Required secure keys are missing');
+
+                // Programmatically construct and submit a POST form directly to the inner iframe
+                const form = document.createElement('form');
+                form.method = 'POST';
+                form.action = action;
+                form.target = 'player-iframe';
+                form.style.display = 'none';
+
+                const addInput = (name, value) => {
+                    const input = document.createElement('input');
+                    input.type = 'hidden';
+                    input.name = name;
+                    input.value = value;
+                    form.appendChild(input);
+                };
+
+                addInput('expires', expires);
+                addInput('token', token);
+                addInput('scope', scope);
+
+                document.body.appendChild(form);
+                form.submit();
+                document.body.removeChild(form);
+
+                // Watch the sandboxed player frame load, then fade out the spinner
+                const iframe = document.getElementById('player-iframe');
+                iframe.onload = () => {
+                    setTimeout(() => {
+                        loadingEl.style.opacity = '0';
+                        setTimeout(() => loadingEl.style.display = 'none', 500);
+                    }, 2000);
+                };
+
             } catch (error) {
-                onError(error);
+                console.error('Loader Error:', error);
+                loadingText.style.color = '#ff4444';
+                loadingText.innerText = 'Failed to load live video feed. Please reload the page.';
             }
         }
 
-        function onErrorEvent(event) {
-            onError(event.detail);
-        }
-
-        function onError(error) {
-            console.error('Shaka Player Error Code:', error.code, 'Object:', error);
-        }
-
-        document.addEventListener('DOMContentLoaded', initApp);
+        document.addEventListener('DOMContentLoaded', loadStream);
     </script>
 </body>
 </html>
