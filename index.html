@@ -3,191 +3,228 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Live Stream Player</title>
+    <title>Live Stream Portal</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800&display=swap" rel="stylesheet">
     <style>
-        /* Base styles */
+        /* Modern Premium Dark Glassmorphism Styling */
         html, body {
             margin: 0;
             padding: 0;
             width: 100%;
             height: 100%;
-            background-color: #000;
+            background-color: #0d0d0d;
+            font-family: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif;
+            color: #ffffff;
             overflow: hidden;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            -webkit-font-smoothing: antialiased;
         }
 
-        .viewport-wrapper {
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            background: radial-gradient(circle at center, #141414 0%, #000000 100%);
-        }
-
-        .player-container {
-            position: relative;
-            width: 100%;
-            height: 100%;
-            background-color: #000;
-        }
-
-        /* Iframe styling */
-        iframe {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            border: 0;
-            background-color: #000;
-        }
-
-        /* Desktop/Tablet 16:9 box */
-        @media (min-width: 768px) {
-            .player-container {
-                width: 90vw;
-                height: 50.625vw; /* 16:9 Aspect Ratio */
-                max-width: 1120px;
-                max-height: 630px;
-                border-radius: 16px;
-                overflow: hidden;
-                box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7), 0 0 50px rgba(0, 188, 212, 0.15);
-                border: 1px solid rgba(255, 255, 255, 0.05);
-            }
-        }
-
-        /* Loading spinner styling */
-        .loading-overlay {
+        .wrapper {
             position: absolute;
             inset: 0;
             display: flex;
-            flex-direction: column;
             justify-content: center;
             align-items: center;
-            background-color: #000;
-            color: #fff;
-            z-index: 10;
-            transition: opacity 0.5s ease;
+            background: radial-gradient(circle at center, #1b1b2f 0%, #0d0d0d 100%);
+            padding: 20px;
+            box-sizing: border-box;
         }
 
-        .spinner {
-            border: 4px solid rgba(255, 255, 255, 0.1);
-            width: 50px;
-            height: 50px;
+        .portal-card {
+            width: 100%;
+            max-width: 440px;
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 24px;
+            padding: 40px 30px;
+            box-sizing: border-box;
+            text-align: center;
+            box-shadow: 0 30px 60px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+            animation: fadeIn 0.8s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .icon-container {
+            width: 80px;
+            height: 80px;
+            background: linear-gradient(135deg, #00f2fe 0%, #4facfe 100%);
             border-radius: 50%;
-            border-left-color: #00bcd4;
-            animation: spin 1s linear infinite;
-            margin-bottom: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin: 0 auto 24px;
+            box-shadow: 0 10px 25px rgba(79, 172, 254, 0.4);
         }
 
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
+        .icon-container svg {
+            width: 40px;
+            height: 40px;
+            fill: #ffffff;
+        }
+
+        h1 {
+            font-size: 28px;
+            font-weight: 800;
+            margin: 0 0 12px;
+            letter-spacing: -0.5px;
+            background: linear-gradient(135deg, #ffffff 0%, #a6a6a6 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        p {
+            font-size: 15px;
+            line-height: 1.6;
+            color: #8f8f9e;
+            margin: 0 0 32px;
+        }
+
+        /* Pulsing Play Button */
+        .btn-launch {
+            display: block;
+            width: 100%;
+            padding: 18px 24px;
+            font-family: 'Outfit', sans-serif;
+            font-size: 16px;
+            font-weight: 600;
+            color: #ffffff;
+            background: linear-gradient(135deg, #00bcd4 0%, #00acc1 100%);
+            border: none;
+            border-radius: 16px;
+            cursor: pointer;
+            box-shadow: 0 8px 20px rgba(0, 188, 212, 0.3);
+            transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+            position: relative;
+            overflow: hidden;
+            outline: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .btn-launch:active {
+            transform: scale(0.98);
+            box-shadow: 0 4px 10px rgba(0, 188, 212, 0.2);
+        }
+
+        .btn-launch::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            border-radius: 16px;
+            box-shadow: 0 0 0 0 rgba(0, 188, 212, 0.6);
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(0, 188, 212, 0.7); }
+            70% { box-shadow: 0 0 0 15px rgba(0, 188, 212, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(0, 188, 212, 0); }
+        }
+
+        .status-text {
+            font-size: 13px;
+            color: #00bcd4;
+            margin-top: 16px;
+            min-height: 20px;
+            font-weight: 600;
+        }
+
+        /* Footer Info */
+        .footer-note {
+            font-size: 11px;
+            color: #555566;
+            margin-top: 24px;
         }
     </style>
 </head>
 <body>
 
-    <div class="viewport-wrapper">
-        <div class="player-container">
-            <!-- Loading Indicator -->
-            <div id="loading" class="loading-overlay">
-                <div class="spinner"></div>
-                <div id="loading-text">Loading live player session...</div>
+    <div class="wrapper">
+        <div class="portal-card">
+            <div class="icon-container">
+                <svg viewBox="0 0 24 24">
+                    <path d="M8 5v14l11-7z"/>
+                </svg>
             </div>
+            <h1>TSN 1 Live Stream</h1>
+            <p>Bypass Apple's third-party tracking restrictions. Launching as a first-party tab enables native iOS video playback instantly.</p>
+            
+            <button class="btn-launch" id="launch-btn" onclick="launchStream()">
+                LAUNCH LIVE PLAYER
+            </button>
+            <div id="status" class="status-text"></div>
 
-            <!-- 
-                Target player iframe. 
-                - Left completely unsandboxed so iOS Safari's native player features (DRM/playback) work natively.
-                - Pointed to noyoudontsee.me (the inner player) which has no sandbox-blocking logic.
-            -->
-            <iframe 
-                id="player-iframe"
-                name="player-iframe"
-                src="about:blank"
-                allow="autoplay *; fullscreen *; picture-in-picture *; encrypted-media *"
-                allowfullscreen
-                webkitallowfullscreen
-                mozallowfullscreen>
-            </iframe>
+            <div class="footer-note">
+                Bypasses all iframe cookie & sandbox blocks natively.
+            </div>
         </div>
     </div>
 
-    <!-- Hidden form to POST the dynamic session keys -->
-    <form id="player-form" method="POST" action="" target="player-iframe" style="display:none;">
+    <!-- Hidden form to POST the dynamic session keys. 
+         Target set to _blank to open as a first-party tab. -->
+    <form id="player-form" method="POST" action="" target="_blank" style="display:none;">
         <input type="hidden" name="expires" id="f-expires" value="">
         <input type="hidden" name="token" id="f-token" value="">
         <input type="hidden" name="scope" id="f-scope" value="public">
     </form>
 
     <script>
-        async function loadStream() {
-            const loadingEl = document.getElementById('loading');
-            const loadingText = document.getElementById('loading-text');
+        async function launchStream() {
+            const btn = document.getElementById('launch-btn');
+            const status = document.getElementById('status');
             const embedPageUrl = 'https://sportika.net/api/embed/tv/tsn-1';
-            
-            // Highly reliable client-side browser proxy to bypass CORS
             const corsProxy = 'https://corsproxy.io/?' + encodeURIComponent(embedPageUrl);
 
+            btn.disabled = true;
+            status.style.color = '#00bcd4';
+            status.innerText = 'Acquiring secure stream session...';
+
             try {
-                // Fetch the source page to extract active session tokens
+                // Fetch credentials client-side
                 const response = await fetch(corsProxy);
-                if (!response.ok) throw new Error('CORS proxy fetch failed');
+                if (!response.ok) throw new Error('Session fetch failed');
                 
                 const htmlText = await response.text();
 
-                // Parse the DOM of the retrieved page
+                // Parse the credentials
                 const parser = new DOMParser();
                 const doc = parser.parseFromString(htmlText, 'text/html');
 
-                // Extract form action and dynamic tokens
                 const origForm = doc.getElementById('private-embed-form');
-                if (!origForm) throw new Error('Source page structure changed');
+                if (!origForm) throw new Error('Stream structure changed');
 
                 const action = origForm.getAttribute('action');
                 const expires = doc.querySelector('input[name="expires"]')?.value;
                 const token = doc.querySelector('input[name="token"]')?.value;
 
-                if (!action || !token) throw new Error('Session credentials missing');
+                if (!action || !token) throw new Error('Session validation failed');
 
-                // Setup the form submit target
+                // Prepare submit form
                 const form = document.getElementById('player-form');
                 form.action = action;
                 document.getElementById('f-expires').value = expires;
                 document.getElementById('f-token').value = token;
 
-                // POST form into the player iframe
+                // POST into a new browser tab
                 form.submit();
-
-                // Fade out loader once the player page inside iframe completes loading
-                const iframe = document.getElementById('player-iframe');
                 
-                const forceHide = setTimeout(() => {
-                    loadingEl.style.opacity = '0';
-                    setTimeout(() => loadingEl.style.display = 'none', 500);
-                }, 5000);
-
-                iframe.onload = () => {
-                    clearTimeout(forceHide);
-                    setTimeout(() => {
-                        loadingEl.style.opacity = '0';
-                        setTimeout(() => loadingEl.style.display = 'none', 500);
-                    }, 1000);
-                };
-
+                status.style.color = '#4caf50';
+                status.innerText = 'Stream launched successfully!';
+                
             } catch (error) {
-                console.error('Loader Error:', error);
-                loadingText.style.color = '#ff4444';
-                loadingText.innerText = 'Failed to load stream. Please reload the page.';
+                console.error('Launch Error:', error);
+                status.style.color = '#f44336';
+                status.innerText = 'Session expired. Tap launch to retry.';
+            } finally {
+                setTimeout(() => {
+                    btn.disabled = false;
+                }, 2000);
             }
         }
-
-        document.addEventListener('DOMContentLoaded', loadStream);
     </script>
 </body>
 </html>
