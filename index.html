@@ -164,18 +164,36 @@
         </div>
     </div>
 
-    <!-- Hidden form to POST the dynamic session keys. 
-         Target set to _blank to open as a first-party tab. -->
-    <form id="player-form" method="POST" action="" target="_blank" style="display:none;">
-        <input type="hidden" name="expires" id="f-expires" value="">
-        <input type="hidden" name="token" id="f-token" value="">
-        <input type="hidden" name="scope" id="f-scope" value="public">
-    </form>
-
     <script>
         async function launchStream() {
             const btn = document.getElementById('launch-btn');
             const status = document.getElementById('status');
+            
+            // 1. Open the tab synchronously in the click handler.
+            // This is required to bypass iOS Safari's popup blocker.
+            const playerWin = window.open('about:blank', '_blank');
+            if (!playerWin) {
+                status.style.color = '#f44336';
+                status.innerText = 'Popup blocked! Please allow popups for this site.';
+                return;
+            }
+
+            // Write a loading message into the new tab
+            playerWin.document.write(`
+                <html>
+                <head>
+                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                    <title>Loading Stream</title>
+                </head>
+                <body style="background:#0d0d0d;color:#fff;display:flex;flex-direction:column;justify-content:center;align-items:center;font-family:sans-serif;margin:0;padding:20px;height:100vh;box-sizing:border-box;text-align:center;">
+                    <div style="border:4px solid rgba(255,255,255,0.1);width:40px;height:40px;border-radius:50%;border-left-color:#00bcd4;animation:spin 1s linear infinite;margin-bottom:20px;"></div>
+                    <h2 style="font-weight:400;font-size:18px;margin:0 0 10px;">Connecting to live stream...</h2>
+                    <p style="color:#666;font-size:14px;margin:0;">Acquiring secure playback session...</p>
+                    <style>@keyframes spin { 0% { transform:rotate(0deg); } 100% { transform:rotate(360deg); } }</style>
+                </body>
+                </html>
+            `);
+
             const embedPageUrl = 'https://sportika.net/api/embed/tv/tsn-1';
             const corsProxy = 'https://corsproxy.io/?' + encodeURIComponent(embedPageUrl);
 
@@ -184,13 +202,13 @@
             status.innerText = 'Acquiring secure stream session...';
 
             try {
-                // Fetch credentials client-side
+                // 2. Fetch the credentials asynchronously
                 const response = await fetch(corsProxy);
                 if (!response.ok) throw new Error('Session fetch failed');
                 
                 const htmlText = await response.text();
 
-                // Parse the credentials
+                // Parse credentials
                 const parser = new DOMParser();
                 const doc = parser.parseFromString(htmlText, 'text/html');
 
@@ -203,14 +221,30 @@
 
                 if (!action || !token) throw new Error('Session validation failed');
 
-                // Prepare submit form
-                const form = document.getElementById('player-form');
-                form.action = action;
-                document.getElementById('f-expires').value = expires;
-                document.getElementById('f-token').value = token;
-
-                // POST into a new browser tab
-                form.submit();
+                // 3. Write and submit a POST form inside the newly opened tab's document.
+                // This forces the request to be executed as a POST within that tab's context,
+                // avoiding iOS Safari converting it to a GET and throwing a 404.
+                playerWin.document.open();
+                playerWin.document.write(`
+                    <html>
+                    <head>
+                        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                        <title>Live Player</title>
+                    </head>
+                    <body style="background:#000;color:#fff;display:flex;justify-content:center;align-items:center;font-family:sans-serif;margin:0;padding:0;height:100vh;overflow:hidden;">
+                        <h3 style="font-weight:300;">Starting player...</h3>
+                        <form id="post-form" method="POST" action="${action}">
+                            <input type="hidden" name="expires" value="${expires}">
+                            <input type="hidden" name="token" value="${token}">
+                            <input type="hidden" name="scope" value="public">
+                        </form>
+                        <script>
+                            document.getElementById('post-form').submit();
+                        <\/script>
+                    </body>
+                    </html>
+                `);
+                playerWin.document.close();
                 
                 status.style.color = '#4caf50';
                 status.innerText = 'Stream launched successfully!';
@@ -219,6 +253,7 @@
                 console.error('Launch Error:', error);
                 status.style.color = '#f44336';
                 status.innerText = 'Session expired. Tap launch to retry.';
+                if (playerWin) playerWin.close();
             } finally {
                 setTimeout(() => {
                     btn.disabled = false;
