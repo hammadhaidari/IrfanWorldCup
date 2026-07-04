@@ -3,21 +3,27 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Live Stream Player</title>
+    <title>Clean Live Stream Player</title>
+    
+    <!-- Shaka Player Files -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/shaka-player/4.15.10/shaka-player.compiled.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/shaka-player/4.15.10/shaka-player.ui.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/shaka-player/4.15.10/controls.css">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
+
     <style>
-        /* Reset and full-screen setup */
+        /* Full-screen setup */
         html, body {
             margin: 0;
             padding: 0;
             width: 100%;
             height: 100%;
-            background-color: #000000;
+            background-color: #000;
             overflow: hidden;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             -webkit-font-smoothing: antialiased;
         }
 
-        /* Full screen container holding the player */
         .viewport-wrapper {
             position: absolute;
             top: 0;
@@ -25,35 +31,31 @@
             right: 0;
             bottom: 0;
             display: flex;
-            flex-direction: column;
             justify-content: center;
             align-items: center;
             background: radial-gradient(circle at center, #141414 0%, #000000 100%);
         }
 
-        /* Responsive Player container with iOS iframe scaling fixes */
         .player-container {
             position: relative;
             width: 100%;
             height: 100%;
-            max-width: 100%;
-            max-height: 100%;
-            overflow: hidden;
-            -webkit-overflow-scrolling: touch; /* Smooth scrolling for iOS inner scroll */
-        }
-
-        /* Iframe styling positioned absolutely to prevent layout shifting */
-        iframe {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            border: 0;
             background-color: #000;
         }
 
-        /* Premium Desktop/Tablet layout: Center player in standard 16:9 ratio */
+        video {
+            width: 100%;
+            height: 100%;
+            background: #000;
+        }
+
+        /* Customize Shaka UI style */
+        .shaka-video-container {
+            width: 100%;
+            height: 100%;
+        }
+
+        /* Desktop/Tablet 16:9 player box */
         @media (min-width: 768px) {
             .player-container {
                 width: 90vw;
@@ -61,6 +63,7 @@
                 max-width: 1120px;
                 max-height: 630px;
                 border-radius: 16px;
+                overflow: hidden;
                 box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7), 0 0 50px rgba(0, 188, 212, 0.15);
                 border: 1px solid rgba(255, 255, 255, 0.05);
             }
@@ -70,17 +73,77 @@
 <body>
 
     <div class="viewport-wrapper">
-        <div class="player-container">
-            <iframe 
-                src="https://sportika.net/api/embed/tv/tsn-1" 
-                allowfullscreen 
-                webkitallowfullscreen 
-                mozallowfullscreen 
-                allow="autoplay *; fullscreen *; picture-in-picture *; encrypted-media *"
-                sandbox="allow-scripts allow-same-origin allow-presentation">
-            </iframe>
+        <!-- Shaka Video Player Container -->
+        <div id="player-container" class="player-container shaka-video-container" data-shaka-player-container>
+            <video autoplay id="video" data-shaka-player playsinline></video>
         </div>
     </div>
 
+    <script>
+        // Direct stream source details scraped from the backend embed
+        const manifestUri = 'https://bia-cf.live.pv-cdn.net/iad-nitro/live/dash/enc/w0rehjjrwe/out/v1/69a2a7041395406b970598f61680e7cf/cenc.mpd';
+        const clearKeyKid = '14eeabf30c14b7fbf3008c03099ce011';
+        const clearKeyKey = '17d2ac8dbc5429bd70af3433aa12158d';
+
+        async function initApp() {
+            // Install polyfills to patch browser differences
+            shaka.polyfill.installAll();
+
+            if (!shaka.Player.isBrowserSupported()) {
+                console.error('Browser not supported!');
+                alert('Your device does not support playing this stream natively.');
+                return;
+            }
+
+            const video = document.getElementById('video');
+            const container = document.getElementById('player-container');
+
+            // Initialize the Shaka Player instance
+            const player = new shaka.Player(video);
+
+            // Construct Shaka Player UI Controls
+            const ui = new shaka.ui.Overlay(player, container, video);
+            ui.configure({
+                controlPanelElements: ['play_pause', 'time_and_duration', 'spacer', 'mute', 'volume', 'fullscreen'],
+            });
+
+            // Configure ClearKey DRM Decryption
+            player.configure({
+                drm: {
+                    clearKeys: {
+                        [clearKeyKid]: clearKeyKey
+                    }
+                },
+                streaming: {
+                    liveSync: { enabled: true, targetLatency: 6, minLatency: 5, maxLatency: 25 },
+                    rebufferingGoal: 3,
+                    bufferingGoal: 4,
+                }
+            });
+
+            player.addEventListener('error', onErrorEvent);
+
+            try {
+                await player.load(manifestUri);
+                console.log('The video stream loaded successfully!');
+                
+                if (player.isLive()) {
+                    try { player.goToLive(); } catch (e) {}
+                }
+            } catch (error) {
+                onError(error);
+            }
+        }
+
+        function onErrorEvent(event) {
+            onError(event.detail);
+        }
+
+        function onError(error) {
+            console.error('Shaka Player Error Code:', error.code, 'Object:', error);
+        }
+
+        document.addEventListener('DOMContentLoaded', initApp);
+    </script>
 </body>
 </html>
