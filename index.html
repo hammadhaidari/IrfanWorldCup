@@ -14,7 +14,6 @@
             overflow: hidden;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
         }
-
         .viewport-wrapper {
             position: absolute;
             top: 0; left: 0; right: 0; bottom: 0;
@@ -23,7 +22,6 @@
             align-items: center;
             background: #000;
         }
-
         .player-container {
             position: relative;
             width: 100%;
@@ -31,7 +29,6 @@
             background-color: #000;
             -webkit-overflow-scrolling: touch;
         }
-
         iframe {
             position: absolute;
             top: 0; left: 0;
@@ -40,7 +37,30 @@
             border: 0;
             background-color: #000;
         }
-
+        .loading-overlay {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background-color: #000;
+            color: #fff;
+            z-index: 10;
+            transition: opacity 0.5s ease;
+        }
+        .spinner {
+            border: 4px solid rgba(255,255,255,0.1);
+            width: 50px; height: 50px;
+            border-radius: 50%;
+            border-left-color: #00bcd4;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
         @media (min-width: 768px) {
             .player-container {
                 width: 90vw;
@@ -58,14 +78,92 @@
 <body>
     <div class="viewport-wrapper">
         <div class="player-container">
-            <iframe 
-                src="https://sportika.net/api/embed/tv/tsn-1" 
-                allowfullscreen 
-                webkitallowfullscreen 
-                mozallowfullscreen 
-                allow="autoplay *; fullscreen *; picture-in-picture *; encrypted-media *">
+            <div id="loading" class="loading-overlay">
+                <div class="spinner"></div>
+                <div id="loading-text">Loading stream...</div>
+            </div>
+            <!-- NO sandbox attribute. Target for the form POST below. -->
+            <iframe
+                id="player-iframe"
+                name="player-iframe"
+                src="about:blank"
+                allow="autoplay *; fullscreen *; picture-in-picture *; encrypted-media *"
+                allowfullscreen
+                webkitallowfullscreen
+                mozallowfullscreen>
             </iframe>
         </div>
     </div>
+
+    <!--
+        This form POSTs directly to noyoudontsee.me (the INNER player).
+        This completely skips the sportika.net wrapper page that has the
+        sandbox detection scripts. noyoudontsee.me has ZERO sandbox checks.
+        Tokens are fetched dynamically via JS below; these are fallbacks.
+    -->
+    <form id="player-form" method="POST" action="https://noyoudontsee.me/api/embed/tv/tsn-1" target="player-iframe" style="display:none;">
+        <input type="hidden" name="expires" id="f-expires" value="">
+        <input type="hidden" name="token" id="f-token" value="">
+        <input type="hidden" name="scope" id="f-scope" value="public">
+    </form>
+
+    <script>
+        // Fallback tokens (valid for ~1 hour from page generation)
+        const FALLBACK_EXPIRES = '1783141162';
+        const FALLBACK_TOKEN = 'a089f6627aad692d7af44dbddabc55e4c669fe34816bd8a4cb2038a914c744d0';
+
+        async function fetchFreshTokens() {
+            const proxyUrl = 'https://api.allorigins.win/get?url=' + encodeURIComponent('https://sportika.net/api/embed/tv/tsn-1');
+            try {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 5000);
+                const resp = await fetch(proxyUrl, { signal: controller.signal });
+                clearTimeout(timeoutId);
+                if (!resp.ok) throw new Error('bad response');
+                const json = await resp.json();
+                const html = json.contents || '';
+                const expiresMatch = html.match(/name="expires"\s+value="([^"]+)"/);
+                const tokenMatch = html.match(/name="token"\s+value="([^"]+)"/);
+                if (expiresMatch && tokenMatch) {
+                    return { expires: expiresMatch[1], token: tokenMatch[1] };
+                }
+            } catch (e) {
+                console.warn('Proxy fetch failed, using fallback tokens:', e);
+            }
+            return null;
+        }
+
+        async function loadPlayer() {
+            const loadingEl = document.getElementById('loading');
+
+            // Try to get fresh tokens; fall back to hardcoded ones
+            const fresh = await fetchFreshTokens();
+            const expires = fresh ? fresh.expires : FALLBACK_EXPIRES;
+            const token = fresh ? fresh.token : FALLBACK_TOKEN;
+
+            document.getElementById('f-expires').value = expires;
+            document.getElementById('f-token').value = token;
+
+            // Submit the form — this POSTs to noyoudontsee.me inside our iframe
+            document.getElementById('player-form').submit();
+
+            // Hide the loading overlay once the iframe loads
+            const iframe = document.getElementById('player-iframe');
+            const forceHide = setTimeout(() => {
+                loadingEl.style.opacity = '0';
+                setTimeout(() => loadingEl.style.display = 'none', 500);
+            }, 5000);
+
+            iframe.onload = () => {
+                clearTimeout(forceHide);
+                setTimeout(() => {
+                    loadingEl.style.opacity = '0';
+                    setTimeout(() => loadingEl.style.display = 'none', 500);
+                }, 1000);
+            };
+        }
+
+        document.addEventListener('DOMContentLoaded', loadPlayer);
+    </script>
 </body>
 </html>
