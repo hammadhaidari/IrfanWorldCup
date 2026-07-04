@@ -101,7 +101,7 @@
                 <div id="loading-text">Requesting secure stream session...</div>
             </div>
 
-            <!-- Target Iframe (Sandboxed to block all popup/redirect ads) -->
+            <!-- Target Iframe (Sandboxed with allow-forms to enable the POST request redirect) -->
             <iframe 
                 id="player-iframe"
                 name="player-iframe"
@@ -110,24 +110,49 @@
                 allowfullscreen
                 webkitallowfullscreen
                 mozallowfullscreen
-                sandbox="allow-scripts allow-same-origin allow-presentation">
+                sandbox="allow-scripts allow-same-origin allow-presentation allow-forms">
             </iframe>
         </div>
     </div>
 
     <script>
+        async function fetchScrapedData() {
+            const embedPageUrl = 'https://sportika.net/api/embed/tv/tsn-1';
+            const proxies = [
+                'https://api.allorigins.win/raw?url=' + encodeURIComponent(embedPageUrl),
+                'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(embedPageUrl)
+            ];
+
+            for (const proxyUrl of proxies) {
+                try {
+                    console.log('Attempting fetch via proxy:', proxyUrl);
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => controller.abort(), 6000); // 6 seconds timeout
+
+                    const response = await fetch(proxyUrl, { signal: controller.signal });
+                    clearTimeout(timeoutId);
+
+                    if (response.ok) {
+                        const htmlText = await response.text();
+                        if (htmlText && htmlText.includes('private-embed-form')) {
+                            console.log('Successfully fetched embed configuration using:', proxyUrl);
+                            return htmlText;
+                        }
+                    }
+                } catch (e) {
+                    console.warn('Proxy failed or timed out:', proxyUrl, e);
+                }
+            }
+            throw new Error('All CORS proxies failed to fetch the stream configuration.');
+        }
+
         async function loadStream() {
             const loadingEl = document.getElementById('loading');
             const loadingText = document.getElementById('loading-text');
-            const embedPageUrl = 'https://sportika.net/api/embed/tv/tsn-1';
-            const corsProxy = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(embedPageUrl);
 
             try {
-                // Fetch the sportika source page using a public CORS proxy to grab fresh session tokens
-                const response = await fetch(corsProxy);
-                if (!response.ok) throw new Error('CORS fetch failure');
-                
-                const htmlText = await response.text();
+                // Fetch the embed configurations with proxy redundancy
+                const htmlText = await fetchScrapedData();
 
                 // Parse the DOM of the retrieved page
                 const parser = new DOMParser();
@@ -169,11 +194,19 @@
 
                 // Watch the sandboxed player frame load, then fade out the spinner
                 const iframe = document.getElementById('player-iframe');
+                
+                // Fallback timeout: force loader removal after 6 seconds in case load event fails to fire
+                const forceRemoveLoader = setTimeout(() => {
+                    loadingEl.style.opacity = '0';
+                    setTimeout(() => loadingEl.style.display = 'none', 500);
+                }, 6000);
+
                 iframe.onload = () => {
+                    clearTimeout(forceRemoveLoader);
                     setTimeout(() => {
                         loadingEl.style.opacity = '0';
                         setTimeout(() => loadingEl.style.display = 'none', 500);
-                    }, 2000);
+                    }, 1000);
                 };
 
             } catch (error) {
